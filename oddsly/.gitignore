@@ -12,6 +12,13 @@
 .swiftpm/
 migrate_working_dir/
 
+node_modules/
+package-lock.json
+serviceAccountKey.json
+.env
+
+pubspec.lock
+
 # IntelliJ related
 *.iml
 *.ipr
