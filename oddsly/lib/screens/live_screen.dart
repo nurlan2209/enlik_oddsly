@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:oddsly/screens/match_detail_screen.dart';
 
 class LiveScreen extends StatelessWidget {
-  const LiveScreen({super.key});
+  final VoidCallback onBetPlaced; // Принимаем колбэк
+
+  const LiveScreen({super.key, required this.onBetPlaced});
 
   @override
   Widget build(BuildContext context) {
+    // ... (весь остальной код до Expanded остается без изменений)
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -95,29 +99,42 @@ class LiveScreen extends StatelessWidget {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(16),
-              children: const [MatchCard(), SizedBox(height: 12), MatchCard()],
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => MatchDetailScreen(
+                          onBetPlaced: onBetPlaced,
+                        ), // Передаем колбэк дальше
+                      ),
+                    );
+                  },
+                  child: const MatchCard(),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => MatchDetailScreen(
+                          onBetPlaced: onBetPlaced,
+                        ), // Передаем колбэк дальше
+                      ),
+                    );
+                  },
+                  child: const MatchCard(),
+                ),
+              ],
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Icons.whatshot), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.sports_soccer), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.menu), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: ''),
-        ],
-        currentIndex: 1,
-        selectedItemColor: Colors.orange,
-        unselectedItemColor: Colors.grey,
-        showSelectedLabels: false,
-        showUnselectedLabels: false,
-        type: BottomNavigationBarType.fixed,
       ),
     );
   }
 }
 
+// ... (классы SportChip, MatchCard, BetButton остаются без изменений)
 class SportChip extends StatelessWidget {
   final IconData icon;
   final String label;

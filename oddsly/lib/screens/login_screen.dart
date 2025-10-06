@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:oddsly/screens/live_screen.dart';
+import 'package:oddsly/screens/main_screen.dart'; // ИЗМЕНЕНИЕ
 import 'package:oddsly/services/api_service.dart';
 import 'package:oddsly/widgets/custom_button.dart';
 
@@ -26,13 +26,17 @@ class _LoginScreenState extends State<LoginScreen> {
       _passwordController.text,
     );
 
+    // ИСПРАВЛЕНИЕ: Проверяем, что виджет все еще на экране
+    if (!mounted) return;
+
     setState(() {
       _isLoading = false;
     });
 
     if (result.containsKey('token')) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LiveScreen()),
+        // ИСПРАВЛЕНИЕ: Переходим на MainScreen, который управляет навигацией
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } else {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();

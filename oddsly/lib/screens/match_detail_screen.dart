@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:oddsly/services/api_service.dart';
 
 class MatchDetailScreen extends StatefulWidget {
-  const MatchDetailScreen({super.key});
+  final VoidCallback onBetPlaced; // Принимаем колбэк
+
+  const MatchDetailScreen({super.key, required this.onBetPlaced});
 
   @override
   State<MatchDetailScreen> createState() => _MatchDetailScreenState();
@@ -19,26 +21,30 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       _isLoading = true;
     });
 
-    // Данные для ставки (для примера)
     final String matchId = "chelsea_vs_leicester";
     final double amount = 200.0;
     final String outcome = "П2 - 1.3";
 
-    // ИСПРАВЛЕНИЕ: Вызываем placeBet без токена, как в новой версии ApiService
     final result = await _apiService.placeBet(matchId, amount, outcome);
 
-    // ИСПРАВЛЕНИЕ: Проверка, что виджет все еще на экране
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     if (result.containsKey('betId')) {
+      // Вызываем колбэк при успехе!
+      widget.onBetPlaced();
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ставка успешно сделана!'),
+        SnackBar(
+          content: Text(
+            'Ставка принята! Новый баланс: ₸${result['newBalance'].toStringAsFixed(2)}',
+          ),
           backgroundColor: Colors.green,
         ),
       );
+      // Возвращаемся назад после успешной ставки
+      Navigator.of(context).pop();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -55,11 +61,15 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (весь остальной код остается без изменений)
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        leading: const Icon(Icons.arrow_back_ios, color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text(
           'ПРЕМЬЕР ЛИГА',
           style: TextStyle(color: Colors.white),
@@ -196,6 +206,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   }
 }
 
+// ... (классы TeamInfoRow, StatsRow, BetOption остаются без изменений)
 class TeamInfoRow extends StatelessWidget {
   final String teamName;
   final int score;
@@ -256,7 +267,6 @@ class StatsRow extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // ИСПРАВЛЕНИЕ: Убраны лишние скобки {}
             Text(
               '$value1${isPercent ? "%" : ""}',
               style: const TextStyle(

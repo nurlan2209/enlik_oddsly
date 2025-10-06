@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:oddsly/screens/live_screen.dart';
 import 'package:oddsly/screens/login_screen.dart';
+import 'package:oddsly/screens/main_screen.dart'; // ИЗМЕНЕНИЕ
 import 'package:oddsly/services/api_service.dart';
 
 class AuthGate extends StatefulWidget {
@@ -36,7 +36,7 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     if (_token != null) {
-      return const LiveScreen();
+      return const MainScreen(); // ИЗМЕНЕНИЕ
     } else {
       return const LoginScreen();
     }

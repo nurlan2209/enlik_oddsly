@@ -16,7 +16,13 @@ class _BetHistoryScreenState extends State<BetHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _betHistoryFuture = _apiService.getBetHistory();
+    _refreshHistory();
+  }
+
+  Future<void> _refreshHistory() async {
+    setState(() {
+      _betHistoryFuture = _apiService.getBetHistory();
+    });
   }
 
   Color _getStatusColor(String status) {
@@ -26,11 +32,22 @@ class _BetHistoryScreenState extends State<BetHistoryScreen> {
       case 'lost':
         return Colors.red;
       case 'won':
-        return Colors.blue;
-      case 'sold':
-        return Colors.grey;
+        return Colors.blue; // Вы можете выбрать другой цвет для выигрыша
       default:
-        return Colors.black;
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return 'Активно';
+      case 'lost':
+        return 'Проиграно';
+      case 'won':
+        return 'Выиграно';
+      default:
+        return 'Продано';
     }
   }
 
@@ -50,37 +67,43 @@ class _BetHistoryScreenState extends State<BetHistoryScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<dynamic>>(
-        future: _betHistoryFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError ||
-              !snapshot.hasData ||
-              snapshot.data!.isEmpty) {
-            return const Center(child: Text('История ставок пуста.'));
-          }
-
-          final bets = snapshot.data!
-              .map((json) => BetHistory.fromJson(json))
-              .toList();
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: bets.length,
-            itemBuilder: (context, index) {
-              final bet = bets[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: BetHistoryCard(
-                  bet: bet,
-                  color: _getStatusColor(bet.status),
-                ),
+      body: RefreshIndicator(
+        onRefresh: _refreshHistory,
+        child: FutureBuilder<List<dynamic>>(
+          future: _betHistoryFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError ||
+                !snapshot.hasData ||
+                snapshot.data!.isEmpty) {
+              return const Center(
+                child: Text('История ставок пуста. Потяните, чтобы обновить.'),
               );
-            },
-          );
-        },
+            }
+
+            final bets = snapshot.data!
+                .map((json) => BetHistory.fromJson(json))
+                .toList();
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: bets.length,
+              itemBuilder: (context, index) {
+                final bet = bets[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: BetHistoryCard(
+                    bet: bet,
+                    color: _getStatusColor(bet.status),
+                    statusText: _getStatusText(bet.status),
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -89,8 +112,14 @@ class _BetHistoryScreenState extends State<BetHistoryScreen> {
 class BetHistoryCard extends StatelessWidget {
   final BetHistory bet;
   final Color color;
+  final String statusText;
 
-  const BetHistoryCard({super.key, required this.bet, required this.color});
+  const BetHistoryCard({
+    super.key,
+    required this.bet,
+    required this.color,
+    required this.statusText,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -109,30 +138,48 @@ class BetHistoryCard extends StatelessWidget {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Здесь можно будет отображать лигу, когда мы начнем передавать полные данные о матче
               Text(
-                bet.matchId,
+                'Ставка #${bet.id.substring(0, 6)}', // Показываем часть ID ставки
                 style: const TextStyle(color: Colors.grey),
-              ), // Показываем ID матча
-              const Spacer(),
+              ),
               Text(
-                bet.status,
+                statusText,
                 style: TextStyle(color: color, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 12),
+          // Здесь можно будет отображать команды
+          Text(
+            bet.matchId.replaceAll('_', ' ').replaceAll('vs', ' vs '),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Ставка: ${bet.amount} ₸',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Сумма ставки',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₸ ${bet.amount}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -140,12 +187,12 @@ class BetHistoryCard extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
+                  color: color.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   bet.outcome,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: color),
                 ),
               ),
             ],

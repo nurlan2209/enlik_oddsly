@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:http/http.dart' as http; // ИСПРАВЛЕНИЕ
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:oddsly/models/user_model.dart';
 
 class ApiService {
   final String _baseUrl = 'http://localhost:3000';
@@ -50,6 +51,30 @@ class ApiService {
     }
   }
 
+  Future<UserModel?> getUserProfile() async {
+    final token = await getToken();
+    if (token == null) return null;
+
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return UserModel.fromJson(jsonDecode(response.body));
+      } else {
+        return null;
+      }
+    } catch (e) {
+      print(e);
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> placeBet(
     String matchId,
     double amount,
@@ -79,7 +104,6 @@ class ApiService {
     }
   }
 
-  // ЭТОТ МЕТОД ТЕПЕРЬ ВНУТРИ КЛАССА
   Future<List<dynamic>> getBetHistory() async {
     final token = await getToken();
     if (token == null) throw Exception('User not authenticated');
