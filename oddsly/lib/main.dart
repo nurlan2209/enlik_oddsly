@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:oddsly/auth_gate.dart';
+import 'firebase_options.dart'; // 1. ДОБАВЬТЕ ЭТОТ ИМПОРТ
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Эту строку можно закомментировать, если Firebase используется ТОЛЬКО для Firestore на бэкенде.
-  // Но лучше оставить, если планируется использовать другие сервисы Firebase во Flutter.
-  await Firebase.initializeApp();
+
+  // 2. ИЗМЕНИТЕ ЭТУ СТРОКУ
+  // Мы передаем конфигурацию для текущей платформы (в вашем случае, для веба)
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const MyApp());
 }
 
@@ -32,7 +35,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuthGate(), // ИСПОЛЬЗУЕМ НАШ НОВЫЙ ВИДЖЕТ
+      home: const AuthGate(),
     );
   }
 }

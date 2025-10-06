@@ -4,12 +4,16 @@ class CustomTextField extends StatelessWidget {
   final String label;
   final bool isPassword;
   final String hint;
+  final TextEditingController? controller;
+  final TextInputType? keyboardType;
 
   const CustomTextField({
     super.key,
+    this.controller,
     required this.label,
     this.isPassword = false,
     required this.hint,
+    this.keyboardType,
   });
 
   @override
@@ -23,7 +27,9 @@ class CustomTextField extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         TextField(
+          controller: controller, // ✅ ВАЖНО: подключаем контроллер
           obscureText: isPassword,
+          keyboardType: keyboardType,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey.shade400),

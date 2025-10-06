@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:oddsly/screens/main_screen.dart'; // ИЗМЕНЕНИЕ
+import 'package:oddsly/screens/main_screen.dart';
+import 'package:oddsly/screens/register_screen.dart'; // 1. ДОБАВЛЕН ИМПОРТ
 import 'package:oddsly/services/api_service.dart';
 import 'package:oddsly/widgets/custom_button.dart';
 
@@ -26,7 +27,6 @@ class _LoginScreenState extends State<LoginScreen> {
       _passwordController.text,
     );
 
-    // ИСПРАВЛЕНИЕ: Проверяем, что виджет все еще на экране
     if (!mounted) return;
 
     setState(() {
@@ -35,7 +35,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (result.containsKey('token')) {
       Navigator.of(context).pushReplacement(
-        // ИСПРАВЛЕНИЕ: Переходим на MainScreen, который управляет навигацией
         MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } else {
@@ -70,6 +69,32 @@ class _LoginScreenState extends State<LoginScreen> {
             CustomButton(
               text: _isLoading ? 'ВХОД...' : 'Войти',
               onPressed: _isLoading ? () {} : _handleLogin,
+            ),
+            const SizedBox(height: 40), // Отступ
+            // 2. ДОБАВЛЕН БЛОК С КНОПКОЙ РЕГИСТРАЦИИ
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Нет аккаунта?'),
+                TextButton(
+                  onPressed: () {
+                    // Переход на экран регистрации
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Зарегистрироваться',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
