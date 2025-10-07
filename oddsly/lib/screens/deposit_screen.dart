@@ -1,103 +1,167 @@
-import 'package:flutter/material.dart';
+// oddsly/lib/screens/deposit_screen.dart
 
-class DepositScreen extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:oddsly/services/api_service.dart';
+
+class DepositScreen extends StatefulWidget {
   const DepositScreen({super.key});
+
+  @override
+  State<DepositScreen> createState() => _DepositScreenState();
+}
+
+class _DepositScreenState extends State<DepositScreen> {
+  final ApiService _apiService = ApiService();
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _cardController = TextEditingController();
+  bool _isLoading = false;
+  bool _agreedToTerms = false;
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _cardController.dispose();
+    super.dispose();
+  }
+
+  void _handleDeposit() async {
+    if (_isLoading) return;
+
+    final amount = double.tryParse(_amountController.text);
+
+    if (amount == null || amount <= 0) {
+      _showError('Введите корректную сумму');
+      return;
+    }
+
+    if (amount < 200) {
+      _showError('Минимальная сумма пополнения 200₸');
+      return;
+    }
+
+    if (_cardController.text.isEmpty) {
+      _showError('Введите номер карты');
+      return;
+    }
+
+    if (!_agreedToTerms) {
+      _showError('Примите условия использования');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final result = await _apiService.depositBalance(
+      amount,
+      'card',
+      cardNumber: _cardController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (result.containsKey('newBalance')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Баланс пополнен! Новый баланс: ₸${result['newBalance'].toStringAsFixed(2)}',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.of(context).pop(true);
+    } else {
+      _showError(result['message'] ?? 'Ошибка пополнения');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        leading: const Icon(Icons.arrow_back_ios, color: Colors.black),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('ПОПОЛНЕНИЕ'),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.ac_unit,
-              color: Colors.black,
-            ), // Placeholder Icon
-            onPressed: () {},
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0),
         child: Column(
           children: [
             const SizedBox(height: 20),
-            const Text(
-              '₸12,580',
-              style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+            FutureBuilder(
+              future: _apiService.getUserProfile(),
+              builder: (context, snapshot) {
+                final balance = snapshot.data?.balance ?? 0;
+                return Text(
+                  '₸${balance.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 30),
             Container(
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.orange,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'Пополнение',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                  Row(
+                    children: const [
+                      Icon(Icons.credit_card, color: Colors.white, size: 30),
+                      SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'С карты',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Комиссия 5%',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        'Вывод',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ),
-                  ),
+                  const Icon(Icons.star, color: Colors.white),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: PaymentMethodCard(
-                    icon: Icons.credit_card,
-                    title: 'На карту',
-                    commission: 'Комиссия 5%',
-                    isSelected: true,
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: PaymentMethodCard(
-                    icon: Icons.apple,
-                    title: 'На баланс',
-                    commission: 'Комиссия 0%',
-                    isSelected: false,
-                    color: Colors.grey.shade200,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
             TextField(
+              controller: _cardController,
+              keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 hintText: '4567 •••• •••• 7702',
+                prefixIcon: const Icon(Icons.credit_card),
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
@@ -112,8 +176,11 @@ class DepositScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             TextField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                hintText: '₸ 200',
+                hintText: 'Введите сумму',
+                prefixText: '₸ ',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
@@ -130,8 +197,8 @@ class DepositScreen extends StatelessWidget {
             Row(
               children: [
                 Checkbox(
-                  value: true,
-                  onChanged: (val) {},
+                  value: _agreedToTerms,
+                  onChanged: (val) => setState(() => _agreedToTerms = val!),
                   activeColor: Colors.black,
                 ),
                 const Expanded(
@@ -145,7 +212,7 @@ class DepositScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {},
+                onPressed: _isLoading ? null : _handleDeposit,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -154,77 +221,23 @@ class DepositScreen extends StatelessWidget {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Пополнить депозит',
-                  style: TextStyle(fontSize: 16),
-                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Пополнить баланс',
+                        style: TextStyle(fontSize: 16),
+                      ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class PaymentMethodCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String commission;
-  final bool isSelected;
-  final Color color;
-
-  const PaymentMethodCard({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.commission,
-    required this.isSelected,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(
-                icon,
-                color: isSelected ? Colors.white : Colors.black,
-                size: 30,
-              ),
-              Icon(
-                Icons.star,
-                color: isSelected ? Colors.white : Colors.grey[400],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text(
-            title,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            commission,
-            style: TextStyle(
-              color: isSelected ? Colors.white70 : Colors.grey[600],
-            ),
-          ),
-        ],
       ),
     );
   }

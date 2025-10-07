@@ -103,6 +103,81 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> getTransactionHistory() async {
+    final token = await getToken();
+    if (token == null) throw Exception('User not authenticated');
+
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/transactions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> withdrawBalance(
+    double amount,
+    String cardNumber,
+  ) async {
+    final token = await getToken();
+    if (token == null) {
+      return {'message': 'User not authenticated.'};
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/withdraw'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'amount': amount, 'cardNumber': cardNumber}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'message': 'Connection error: ${e.toString()}'};
+    }
+  }
+
+  Future<Map<String, dynamic>> depositBalance(
+    double amount,
+    String method, {
+    String? cardNumber,
+  }) async {
+    final token = await getToken();
+    if (token == null) {
+      return {'message': 'User not authenticated.'};
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/deposit'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'amount': amount,
+          'method': method,
+          'cardNumber': cardNumber,
+        }),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'message': 'Connection error: ${e.toString()}'};
+    }
+  }
+
   Future<List<MatchModel>> getLiveMatches(String sport) async {
     try {
       final response = await http.get(
@@ -112,7 +187,19 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => MatchModel.fromJson(json)).toList();
+        final matches = data.map((json) => MatchModel.fromJson(json)).toList();
+
+        // Сортировка: live вверху, затем по дате
+        matches.sort((a, b) {
+          if (a.isLive && !b.isLive) return -1;
+          if (!a.isLive && b.isLive) return 1;
+
+          final dateA = DateTime.parse(a.matchDate.toString());
+          final dateB = DateTime.parse(b.matchDate.toString());
+          return dateA.compareTo(dateB);
+        });
+
+        return matches;
       } else {
         return [];
       }

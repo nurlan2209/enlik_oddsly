@@ -55,10 +55,22 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     if (_isLoading) return;
 
     final amount = double.tryParse(_amountController.text);
+
+    // Валидация минимальной ставки
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Введите корректную сумму'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (amount < 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Минимальная ставка 100₸'),
           backgroundColor: Colors.red,
         ),
       );
@@ -103,9 +115,18 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       );
       Navigator.of(context).pop();
     } else {
+      // Обработка недостаточного баланса
+      final message = result['message'] ?? 'Ошибка';
+      final isInsufficientFunds =
+          message.contains('Недостаточно') || message.contains('Insufficient');
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ошибка: ${result['message']}'),
+          content: Text(
+            isInsufficientFunds
+                ? 'Недостаточно средств на балансе'
+                : 'Ошибка: $message',
+          ),
           backgroundColor: Colors.red,
         ),
       );

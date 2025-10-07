@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:oddsly/models/match_model.dart';
 import 'package:oddsly/screens/match_detail_screen.dart';
 import 'package:oddsly/services/api_service.dart';
+import 'dart:async';
 
 class LiveScreen extends StatefulWidget {
   final VoidCallback onBetPlaced;
@@ -15,12 +16,27 @@ class LiveScreen extends StatefulWidget {
 class _LiveScreenState extends State<LiveScreen> {
   final ApiService _apiService = ApiService();
   String _selectedSport = 'football';
+  String _selectedStatus = 'all'; // all, live, scheduled, finished
   Future<List<MatchModel>>? _matchesFuture;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadMatches();
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _loadMatches();
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   void _loadMatches() {
@@ -34,6 +50,17 @@ class _LiveScreenState extends State<LiveScreen> {
       _selectedSport = sport;
       _loadMatches();
     });
+  }
+
+  void _changeStatus(String status) {
+    setState(() {
+      _selectedStatus = status;
+    });
+  }
+
+  List<MatchModel> _filterMatches(List<MatchModel> matches) {
+    if (_selectedStatus == 'all') return matches;
+    return matches.where((m) => m.status == _selectedStatus).toList();
   }
 
   @override
@@ -116,6 +143,39 @@ class _LiveScreenState extends State<LiveScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 50,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                FilterChip(
+                  label: 'Все',
+                  selected: _selectedStatus == 'all',
+                  onSelected: (_) => _changeStatus('all'),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: 'Live',
+                  selected: _selectedStatus == 'live',
+                  onSelected: (_) => _changeStatus('live'),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: 'Скоро',
+                  selected: _selectedStatus == 'scheduled',
+                  onSelected: (_) => _changeStatus('scheduled'),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: 'Завершено',
+                  selected: _selectedStatus == 'finished',
+                  onSelected: (_) => _changeStatus('finished'),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: FutureBuilder<List<MatchModel>>(
               future: _matchesFuture,
@@ -132,7 +192,13 @@ class _LiveScreenState extends State<LiveScreen> {
                   return const Center(child: Text('Нет доступных матчей'));
                 }
 
-                final matches = snapshot.data!;
+                final filteredMatches = _filterMatches(snapshot.data!);
+
+                if (filteredMatches.isEmpty) {
+                  return const Center(
+                    child: Text('Нет матчей с выбранным фильтром'),
+                  );
+                }
 
                 return RefreshIndicator(
                   onRefresh: () async {
@@ -140,14 +206,13 @@ class _LiveScreenState extends State<LiveScreen> {
                   },
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: matches.length,
+                    itemCount: filteredMatches.length,
                     itemBuilder: (context, index) {
-                      final match = matches[index];
+                      final match = filteredMatches[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GestureDetector(
                           onTap: () {
-                            final match = matches[index];
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => MatchDetailScreen(
@@ -167,7 +232,7 @@ class _LiveScreenState extends State<LiveScreen> {
                               ),
                             );
                           },
-                          child: MatchCard(match: matches[index]),
+                          child: MatchCard(match: match),
                         ),
                       );
                     },
@@ -178,6 +243,35 @@ class _LiveScreenState extends State<LiveScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class FilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Function(bool) onSelected;
+
+  const FilterChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: onSelected,
+      selectedColor: Colors.orange,
+      backgroundColor: Colors.white,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : Colors.black,
+        fontWeight: FontWeight.bold,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 }

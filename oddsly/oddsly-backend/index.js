@@ -446,6 +446,153 @@ app.post("/admin/matches", async (req, res) => {
   }
 });
 
+app.post("/deposit", verifyToken, async (req, res) => {
+  const { amount, method, cardNumber } = req.body;
+  const userId = req.user.id;
+
+  if (!amount || amount < 200) {
+    return res.status(400).send({ message: "Минимальная сумма 200₸" });
+  }
+
+  const userRef = db.collection("users").doc(userId);
+  const transactionRef = db.collection("transactions").doc();
+
+  try {
+    const newBalance = await db.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new Error("User not found.");
+      }
+
+      const currentBalance = userDoc.data().balance;
+      const commission = method === "card" ? amount * 0.05 : 0;
+      const depositAmount = amount - commission;
+      const updatedBalance = currentBalance + depositAmount;
+
+      transaction.update(userRef, { balance: updatedBalance });
+
+      transaction.set(transactionRef, {
+        userId,
+        type: "deposit",
+        amount: depositAmount,
+        status: "completed",
+        cardNumber: cardNumber || "",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return updatedBalance;
+    });
+
+    res.status(200).send({
+      message: "Баланс пополнен успешно",
+      newBalance: newBalance,
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ message: "Ошибка пополнения", error: error.message });
+  }
+});
+
+app.post("/withdraw", verifyToken, async (req, res) => {
+  const { amount, cardNumber } = req.body;
+  const userId = req.user.id;
+
+  if (!amount || amount < 200) {
+    return res.status(400).send({ message: "Минимальная сумма вывода 200₸" });
+  }
+
+  if (!cardNumber) {
+    return res.status(400).send({ message: "Укажите номер карты" });
+  }
+
+  const userRef = db.collection("users").doc(userId);
+  const transactionRef = db.collection("transactions").doc();
+
+  try {
+    const newBalance = await db.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new Error("User not found.");
+      }
+
+      const currentBalance = userDoc.data().balance;
+      const commission = amount * 0.05;
+      const totalAmount = amount + commission;
+
+      if (currentBalance < totalAmount) {
+        throw new Error("Недостаточно средств на балансе");
+      }
+
+      const updatedBalance = currentBalance - totalAmount;
+
+      transaction.update(userRef, { balance: updatedBalance });
+
+      transaction.set(transactionRef, {
+        userId,
+        type: "withdrawal",
+        amount: amount,
+        status: "completed",
+        cardNumber: cardNumber,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return updatedBalance;
+    });
+
+    res.status(200).send({
+      message: "Вывод выполнен успешно",
+      newBalance: newBalance,
+    });
+  } catch (error) {
+    if (error.message === "Недостаточно средств на балансе") {
+      return res.status(400).send({ message: error.message });
+    }
+    res.status(500).send({ message: "Ошибка вывода", error: error.message });
+  }
+});
+
+app.get("/transactions", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const transactionsRef = db.collection("transactions");
+
+    const snapshot = await transactionsRef
+      .where("userId", "==", userId)
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(200).send([]);
+    }
+
+    const transactions = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        type: data.type,
+        amount: data.amount,
+        status: data.status || "completed",
+        cardNumber: data.cardNumber || "",
+        createdAt: data.createdAt
+          ? data.createdAt.toDate
+            ? data.createdAt.toDate().toISOString()
+            : data.createdAt
+          : new Date().toISOString(),
+      };
+    });
+
+    res.status(200).send(transactions);
+  } catch (error) {
+    console.error("Error in /transactions:", error);
+    res.status(500).send({
+      message: "Error getting transaction history.",
+      error: error.message,
+    });
+  }
+});
+
 app.post("/admin/matches/update", async (req, res) => {
   const { matchId, team1Score, team2Score } = req.body;
 
