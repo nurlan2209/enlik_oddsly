@@ -1,14 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:oddsly/models/match_model.dart';
 import 'package:oddsly/screens/match_detail_screen.dart';
+import 'package:oddsly/services/api_service.dart';
 
-class LiveScreen extends StatelessWidget {
-  final VoidCallback onBetPlaced; // Принимаем колбэк
+class LiveScreen extends StatefulWidget {
+  final VoidCallback onBetPlaced;
 
   const LiveScreen({super.key, required this.onBetPlaced});
 
   @override
+  State<LiveScreen> createState() => _LiveScreenState();
+}
+
+class _LiveScreenState extends State<LiveScreen> {
+  final ApiService _apiService = ApiService();
+  String _selectedSport = 'football';
+  Future<List<MatchModel>>? _matchesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMatches();
+  }
+
+  void _loadMatches() {
+    setState(() {
+      _matchesFuture = _apiService.getLiveMatches(_selectedSport);
+    });
+  }
+
+  void _changeSport(String sport) {
+    setState(() {
+      _selectedSport = sport;
+      _loadMatches();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // ... (весь остальной код до Expanded остается без изменений)
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -36,8 +65,8 @@ class LiveScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings, color: Colors.black),
-            onPressed: () {},
+            icon: const Icon(Icons.refresh, color: Colors.black),
+            onPressed: _loadMatches,
           ),
         ],
       ),
@@ -63,69 +92,88 @@ class LiveScreen extends StatelessWidget {
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: const [
+              children: [
                 SportChip(
                   icon: Icons.sports_soccer,
                   label: 'Футбол',
-                  isSelected: true,
+                  isSelected: _selectedSport == 'football',
+                  onTap: () => _changeSport('football'),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 SportChip(
                   icon: Icons.sports_basketball,
                   label: 'Баскетбол',
-                  isSelected: false,
+                  isSelected: _selectedSport == 'basketball',
+                  onTap: () => _changeSport('basketball'),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 SportChip(
                   icon: Icons.sports_tennis,
                   label: 'Теннис',
-                  isSelected: false,
-                ),
-                SizedBox(width: 10),
-                SportChip(
-                  icon: Icons.sports_hockey,
-                  label: 'Хоккей',
-                  isSelected: false,
-                ),
-                SizedBox(width: 10),
-                SportChip(
-                  icon: Icons.sports_volleyball,
-                  label: 'Волейбол',
-                  isSelected: false,
+                  isSelected: _selectedSport == 'tennis',
+                  onTap: () => _changeSport('tennis'),
                 ),
               ],
             ),
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => MatchDetailScreen(
-                          onBetPlaced: onBetPlaced,
-                        ), // Передаем колбэк дальше
-                      ),
-                    );
+            child: FutureBuilder<List<MatchModel>>(
+              future: _matchesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Ошибка: ${snapshot.error}'));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('Нет доступных матчей'));
+                }
+
+                final matches = snapshot.data!;
+
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    _loadMatches();
                   },
-                  child: const MatchCard(),
-                ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => MatchDetailScreen(
-                          onBetPlaced: onBetPlaced,
-                        ), // Передаем колбэк дальше
-                      ),
-                    );
-                  },
-                  child: const MatchCard(),
-                ),
-              ],
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: matches.length,
+                    itemBuilder: (context, index) {
+                      final match = matches[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GestureDetector(
+                          onTap: () {
+                            final match = matches[index];
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => MatchDetailScreen(
+                                  onBetPlaced: widget.onBetPlaced,
+                                  match: {
+                                    'id': match.id,
+                                    'team1Name': match.team1Name,
+                                    'team2Name': match.team2Name,
+                                    'league': match.league,
+                                    'odds': {
+                                      'home': match.odds['home'],
+                                      'draw': match.odds['draw'],
+                                      'away': match.odds['away'],
+                                    },
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                          child: MatchCard(match: matches[index]),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -134,39 +182,45 @@ class LiveScreen extends StatelessWidget {
   }
 }
 
-// ... (классы SportChip, MatchCard, BetButton остаются без изменений)
 class SportChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isSelected;
+  final VoidCallback onTap;
 
   const SportChip({
     super.key,
     required this.icon,
     required this.label,
     this.isSelected = false,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(icon, color: isSelected ? Colors.white : Colors.black),
-      label: Text(
-        label,
-        style: TextStyle(
-          color: isSelected ? Colors.white : Colors.black,
-          fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: onTap,
+      child: Chip(
+        avatar: Icon(icon, color: isSelected ? Colors.white : Colors.black),
+        label: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
         ),
+        backgroundColor: isSelected ? Colors.black : Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      backgroundColor: isSelected ? Colors.black : Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 }
 
 class MatchCard extends StatelessWidget {
-  const MatchCard({super.key});
+  final MatchModel match;
+
+  const MatchCard({super.key, required this.match});
 
   @override
   Widget build(BuildContext context) {
@@ -179,7 +233,31 @@ class MatchCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Премьер лига', style: TextStyle(color: Colors.grey)),
+          Row(
+            children: [
+              Text(match.league, style: const TextStyle(color: Colors.grey)),
+              const Spacer(),
+              if (match.status == 'live')
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'LIVE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -187,23 +265,41 @@ class MatchCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    children: const [
-                      Icon(Icons.shield, color: Colors.blue),
-                      SizedBox(width: 8),
+                    children: [
+                      if (match.team1Logo.isNotEmpty)
+                        Image.network(
+                          match.team1Logo,
+                          width: 24,
+                          height: 24,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.shield, color: Colors.blue),
+                        )
+                      else
+                        const Icon(Icons.shield, color: Colors.blue),
+                      const SizedBox(width: 8),
                       Text(
-                        'Chelsea',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        match.team1Name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Row(
-                    children: const [
-                      Icon(Icons.shield, color: Colors.red),
-                      SizedBox(width: 8),
+                    children: [
+                      if (match.team2Logo.isNotEmpty)
+                        Image.network(
+                          match.team2Logo,
+                          width: 24,
+                          height: 24,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.shield, color: Colors.red),
+                        )
+                      else
+                        const Icon(Icons.shield, color: Colors.red),
+                      const SizedBox(width: 8),
                       Text(
-                        'Leicester C',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        match.team2Name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -211,47 +307,48 @@ class MatchCard extends StatelessWidget {
               ),
               const Spacer(),
               Column(
-                children: const [
+                children: [
                   Text(
-                    '1',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    match.team1Score.toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
-                    '2',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    match.team2Score.toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
                 ],
-              ),
-              const SizedBox(width: 20),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: const [Icon(Icons.bar_chart), Text('790')],
-                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.play_arrow_outlined, color: Colors.grey),
+              const Icon(Icons.access_time, color: Colors.grey, size: 16),
               const SizedBox(width: 4),
-              const Text('49:30', style: TextStyle(color: Colors.grey)),
+              Text(match.time, style: const TextStyle(color: Colors.grey)),
             ],
           ),
           const SizedBox(height: 16),
           Row(
-            children: const [
-              Expanded(child: BetButton(text: 'П1 - 12')),
-              SizedBox(width: 10),
-              Expanded(child: BetButton(text: 'X - 14.2')),
-              SizedBox(width: 10),
-              Expanded(child: BetButton(text: 'П2 - 1.3')),
+            children: [
+              Expanded(
+                child: BetButton(text: 'П1 - ${match.odds['home'] ?? '0'}'),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: BetButton(text: 'X - ${match.odds['draw'] ?? '0'}'),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: BetButton(text: 'П2 - ${match.odds['away'] ?? '0'}'),
+              ),
             ],
           ),
         ],

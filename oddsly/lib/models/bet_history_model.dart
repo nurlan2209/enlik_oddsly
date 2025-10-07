@@ -4,8 +4,10 @@ class BetHistory {
   final String matchId;
   final String outcome;
   final String status;
-  // Firestore сохраняет время в специальном формате, поэтому пока просто читаем его как Map
-  final Map<String, dynamic> createdAt;
+  final String createdAt;
+  final String team1Name;
+  final String team2Name;
+  final String league;
 
   BetHistory({
     required this.id,
@@ -14,6 +16,9 @@ class BetHistory {
     required this.outcome,
     required this.status,
     required this.createdAt,
+    required this.team1Name,
+    required this.team2Name,
+    required this.league,
   });
 
   factory BetHistory.fromJson(Map<String, dynamic> json) {
@@ -23,7 +28,10 @@ class BetHistory {
       matchId: json['matchId'],
       outcome: json['outcome'],
       status: json['status'],
-      createdAt: json['createdAt'],
+      createdAt: json['createdAt'] ?? '',
+      team1Name: json['team1Name'] ?? 'Unknown',
+      team2Name: json['team2Name'] ?? 'Unknown',
+      league: json['league'] ?? 'Unknown',
     );
   }
 }

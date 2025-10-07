@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:oddsly/models/bet_history_model.dart';
 import 'package:oddsly/services/api_service.dart';
+import 'package:intl/intl.dart';
 
 class BetHistoryScreen extends StatefulWidget {
   const BetHistoryScreen({super.key});
@@ -121,6 +122,16 @@ class BetHistoryCard extends StatelessWidget {
     required this.statusText,
   });
 
+  String _formatDate(String isoDate) {
+    if (isoDate.isEmpty) return 'Недавно';
+    try {
+      final date = DateTime.parse(isoDate);
+      return DateFormat('dd.MM.yyyy HH:mm').format(date);
+    } catch (e) {
+      return 'Недавно';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -131,7 +142,7 @@ class BetHistoryCard extends StatelessWidget {
         border: Border.all(color: color, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 10,
           ),
@@ -143,56 +154,64 @@ class BetHistoryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Здесь можно будет отображать лигу, когда мы начнем передавать полные данные о матче
-              Text(
-                'Ставка #${bet.id.substring(0, 6)}', // Показываем часть ID ставки
-                style: const TextStyle(color: Colors.grey),
+              Expanded(
+                child: Text(
+                  bet.league,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              Text(
-                statusText,
-                style: TextStyle(color: color, fontWeight: FontWeight.bold),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // Здесь можно будет отображать команды
+          const SizedBox(height: 8),
           Text(
-            bet.matchId.replaceAll('_', ' ').replaceAll('vs', ' vs '),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            '${bet.team1Name} vs ${bet.team2Name}',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Сумма ставки',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '₸ ${bet.amount}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      bet.outcome,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatDate(bet.createdAt),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
+                  ],
+                ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  bet.outcome,
-                  style: TextStyle(fontWeight: FontWeight.bold, color: color),
+              Text(
+                '₸ ${bet.amount.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
               ),
             ],

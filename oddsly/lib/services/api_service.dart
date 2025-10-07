@@ -1,7 +1,10 @@
+// oddsly/lib/services/api_service.dart (замени полностью)
+
 import 'dart:convert';
-import 'package:http/http.dart' as http; // ИСПРАВЛЕНИЕ
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:oddsly/models/user_model.dart';
+import 'package:oddsly/models/match_model.dart';
 
 class ApiService {
   final String _baseUrl = 'http://localhost:3000';
@@ -70,7 +73,67 @@ class ApiService {
         return null;
       }
     } catch (e) {
-      print(e);
+      return null;
+    }
+  }
+
+  Future<List<MatchModel>> getMatches({String? status, String? league}) async {
+    try {
+      final Map<String, String> queryParams = {};
+      if (status != null) queryParams['status'] = status;
+      if (league != null) queryParams['league'] = league;
+
+      final uri = Uri.parse(
+        '$_baseUrl/matches',
+      ).replace(queryParameters: queryParams);
+
+      final response = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => MatchModel.fromJson(json)).toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<MatchModel>> getLiveMatches(String sport) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/matches/live?sport=$sport'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => MatchModel.fromJson(json)).toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<MatchModel?> getMatchDetails(String matchId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/matches/$matchId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        return MatchModel.fromJson(jsonDecode(response.body));
+      } else {
+        return null;
+      }
+    } catch (e) {
       return null;
     }
   }
@@ -78,8 +141,9 @@ class ApiService {
   Future<Map<String, dynamic>> placeBet(
     String matchId,
     double amount,
-    String outcome,
-  ) async {
+    String outcome, {
+    Map<String, dynamic>? matchInfo,
+  }) async {
     final token = await getToken();
     if (token == null) {
       return {'message': 'User not authenticated.'};
@@ -96,6 +160,7 @@ class ApiService {
           'matchId': matchId,
           'amount': amount,
           'outcome': outcome,
+          'matchInfo': matchInfo,
         }),
       );
       return jsonDecode(response.body);
@@ -122,7 +187,6 @@ class ApiService {
         return [];
       }
     } catch (e) {
-      print(e);
       return [];
     }
   }

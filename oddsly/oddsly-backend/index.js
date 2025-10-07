@@ -3,13 +3,13 @@ const admin = require("firebase-admin");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-require("dotenv").config();
+const fs = require("fs");
 const path = require("path");
+require("dotenv").config();
 
 // --- Инициализация ---
 const serviceAccount = require("./serviceAccountKey.json");
 
-// Проверяем, инициализировано ли уже приложение, чтобы избежать ошибки при перезапуске сервера
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -21,7 +21,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- Middleware ---
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
@@ -40,25 +43,78 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// --- Роуты (Endpoints) ---
+// --- Helper: Read matches from JSON ---
+const loadMatches = () => {
+  try {
+    const data = fs.readFileSync(path.join(__dirname, "matches.json"), "utf8");
+    return JSON.parse(data);
+  } catch (error) {
+    console.error("Error loading matches.json:", error.message);
+    return { football: [], basketball: [], tennis: [] };
+  }
+};
 
-// AUTH (без изменений)
+const getUpcomingMatches = (sport, daysAhead = 7) => {
+  const allMatches = loadMatches();
+  const sportMatches = allMatches[sport] || [];
+
+  const now = new Date();
+
+  return sportMatches
+    .filter((match) => {
+      const matchDate = new Date(match.matchDate);
+      // Показываем все матчи которые еще не прошли (в будущем или сегодня)
+      return (
+        matchDate >= new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      );
+    })
+    .map((match) => ({
+      ...match,
+      sport: sport,
+      team1Score: match.status === "live" ? match.team1Score || 0 : 0,
+      team2Score: match.status === "live" ? match.team2Score || 0 : 0,
+      time: match.status === "live" ? match.time || "Live" : "00:00",
+    }))
+    .sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate))
+    .slice(0, 20);
+};
+
+// --- AUTH ---
 app.post("/register", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, name, surname } = req.body;
     if (!email || !password) {
       return res
         .status(400)
         .send({ message: "Email and password are required." });
     }
+
+    const existingUser = await db
+      .collection("users")
+      .where("email", "==", email)
+      .limit(1)
+      .get();
+    if (!existingUser.empty) {
+      return res.status(409).send({ message: "User already exists." });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const userRef = db.collection("users").doc();
     await userRef.set({
       email: email,
       password: hashedPassword,
+      name: name || "",
+      surname: surname || "",
       balance: 10000,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    res.status(201).send({ message: "User created successfully." });
+
+    const token = jwt.sign(
+      { id: userRef.id, email: email },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
+    res.status(201).send({ message: "User created successfully.", token });
   } catch (error) {
     res
       .status(500)
@@ -115,9 +171,120 @@ app.get("/me", verifyToken, async (req, res) => {
   }
 });
 
-// BETS (без изменений)
+
+app.get("/matches", async (req, res) => {
+  try {
+    const { status, league, limit = 20 } = req.query;
+
+    let query = db.collection("matches");
+
+    if (status) {
+      query = query.where("status", "==", status);
+    }
+    if (league) {
+      query = query.where("league", "==", league);
+    }
+
+    query = query.limit(parseInt(limit));
+
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      return res.status(200).send([]);
+    }
+
+    const matches = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const matchData = { id: doc.id, ...doc.data() };
+
+        const bettingOptionsSnapshot = await doc.ref
+          .collection("bettingOptions")
+          .get();
+
+        matchData.bettingOptions = bettingOptionsSnapshot.docs.map(
+          (betDoc) => ({
+            id: betDoc.id,
+            ...betDoc.data(),
+          })
+        );
+
+        return matchData;
+      })
+    );
+
+    res.status(200).send(matches);
+  } catch (error) {
+    console.error("Error fetching matches:", error);
+    res
+      .status(500)
+      .send({ message: "Error fetching matches.", error: error.message });
+  }
+});
+
+// --- MATCHES ---
+app.get("/matches/live", (req, res) => {
+  const { sport = "football" } = req.query;
+  console.log(`📡 Fetching ${sport} matches (next 3 days)...`);
+
+  try {
+    const matches = getUpcomingMatches(sport, 3);
+    console.log(`✓ Returning ${matches.length} ${sport} matches`);
+    res.status(200).send(matches);
+  } catch (error) {
+    console.error("Error in /matches/live:", error);
+    res
+      .status(500)
+      .send({ message: "Error fetching matches.", error: error.message });
+  }
+});
+
+app.get("/matches/:matchId", async (req, res) => {
+  const { matchId } = req.params;
+
+  try {
+    // Проверяем Firestore (созданные админом)
+    const matchDoc = await db.collection("matches").doc(matchId).get();
+    if (matchDoc.exists) {
+      const matchData = matchDoc.data();
+      const bettingOptions = await matchDoc.ref
+        .collection("bettingOptions")
+        .get();
+      const odds = {};
+      bettingOptions.forEach((doc) => {
+        const data = doc.data();
+        odds[data.type] = data.coefficient;
+      });
+      return res.status(200).send({ id: matchDoc.id, ...matchData, odds });
+    }
+
+    // Ищем в JSON файле
+    const allMatches = loadMatches();
+    const allSports = ["football", "basketball", "tennis"];
+
+    for (const sport of allSports) {
+      const match = allMatches[sport]?.find((m) => m.id === matchId);
+      if (match) {
+        return res.status(200).send({
+          ...match,
+          sport: sport,
+          team1Score: match.team1Score || 0,
+          team2Score: match.team2Score || 0,
+          time: match.time || "00:00",
+        });
+      }
+    }
+
+    res.status(404).send({ message: "Match not found." });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ message: "Error fetching match.", error: error.message });
+  }
+});
+
+// --- BETS ---
 app.post("/bet", verifyToken, async (req, res) => {
-  const { matchId, amount, outcome } = req.body;
+  const { matchId, amount, outcome, matchInfo } = req.body;
   const userId = req.user.id;
 
   if (!matchId || !amount || !outcome) {
@@ -149,6 +316,10 @@ app.post("/bet", verifyToken, async (req, res) => {
         amount,
         outcome,
         status: "active",
+        // Сохраняем информацию о матче
+        team1Name: matchInfo?.team1Name || "Unknown",
+        team2Name: matchInfo?.team2Name || "Unknown",
+        league: matchInfo?.league || "Unknown",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -176,23 +347,48 @@ app.get("/my-bets", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const betsRef = db.collection("bets");
+
     const snapshot = await betsRef
       .where("userId", "==", userId)
-      .orderBy("createdAt", "desc")
+      .limit(100)
       .get();
+
     if (snapshot.empty) {
       return res.status(200).send([]);
     }
-    const bets = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    const bets = snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          userId: data.userId,
+          matchId: data.matchId,
+          amount: data.amount,
+          outcome: data.outcome,
+          status: data.status,
+          team1Name: data.team1Name || "Unknown",
+          team2Name: data.team2Name || "Unknown",
+          league: data.league || "Unknown",
+          createdAt: data.createdAt
+            ? data.createdAt.toDate
+              ? data.createdAt.toDate().toISOString()
+              : data.createdAt
+            : new Date().toISOString(),
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
     res.status(200).send(bets);
   } catch (error) {
+    console.error("Error in /my-bets:", error);
     res
       .status(500)
       .send({ message: "Error getting bet history.", error: error.message });
   }
 });
 
-// ADMIN (обновления здесь)
+// --- ADMIN ---
 app.get("/admin", async (req, res) => {
   try {
     const matchesSnapshot = await db
@@ -214,7 +410,6 @@ app.get("/admin", async (req, res) => {
 app.post("/admin/matches", async (req, res) => {
   try {
     const { team1Name, team2Name, league, matchDate } = req.body;
-    // Создаем ID матча на основе команд и времени для уникальности
     const matchId = `${team1Name.replace(/\s+/g, "")}_vs_${team2Name.replace(
       /\s+/g,
       ""
@@ -231,6 +426,7 @@ app.post("/admin/matches", async (req, res) => {
       team2Score: 0,
       time: "00:00",
       status: "scheduled",
+      sport: "football",
     });
 
     const defaultBetTypes = [
@@ -250,7 +446,6 @@ app.post("/admin/matches", async (req, res) => {
   }
 });
 
-// НОВЫЙ ЭНДПОИНТ: Завершение матча и расчет ставок
 app.post("/admin/matches/update", async (req, res) => {
   const { matchId, team1Score, team2Score } = req.body;
 
@@ -261,24 +456,24 @@ app.post("/admin/matches/update", async (req, res) => {
   const matchRef = db.collection("matches").doc(matchId);
 
   try {
-    // 1. Обновляем счет и статус матча
     await matchRef.update({
       team1Score: parseInt(team1Score, 10),
       team2Score: parseInt(team2Score, 10),
       status: "finished",
     });
 
-    // 2. Определяем исход
     let winningOutcome;
-    if (team1Score > team2Score) {
+    const t1Score = parseInt(team1Score, 10);
+    const t2Score = parseInt(team2Score, 10);
+
+    if (t1Score > t2Score) {
       winningOutcome = "П1";
-    } else if (team1Score < team2Score) {
+    } else if (t1Score < t2Score) {
       winningOutcome = "П2";
     } else {
       winningOutcome = "X";
     }
 
-    // 3. Находим все активные ставки на этот матч
     const betsSnapshot = await db
       .collection("bets")
       .where("matchId", "==", matchId)
@@ -289,35 +484,28 @@ app.post("/admin/matches/update", async (req, res) => {
       return res.redirect("/admin");
     }
 
-    // 4. Проходим по каждой ставке и рассчитываем
     const batch = db.batch();
     for (const doc of betsSnapshot.docs) {
       const bet = doc.data();
       const betRef = doc.ref;
       const userRef = db.collection("users").doc(bet.userId);
 
-      // Получаем коэффициент из строки типа "П1 - 1.3"
       const betParts = bet.outcome.split(" - ");
       const betType = betParts[0];
       const coefficient = parseFloat(betParts[1]);
 
       if (betType === winningOutcome) {
-        // Ставка выиграла
         const winnings = bet.amount * coefficient;
         batch.update(betRef, { status: "won" });
-        // Используем FieldValue.increment для атомарного увеличения баланса
         batch.update(userRef, {
           balance: admin.firestore.FieldValue.increment(winnings),
         });
       } else {
-        // Ставка проиграла
         batch.update(betRef, { status: "lost" });
       }
     }
 
-    // 5. Выполняем все операции атомарно
     await batch.commit();
-
     res.redirect("/admin");
   } catch (error) {
     console.error("Error settling bets:", error);
@@ -327,7 +515,6 @@ app.post("/admin/matches/update", async (req, res) => {
   }
 });
 
-// --- Запуск сервера ---
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

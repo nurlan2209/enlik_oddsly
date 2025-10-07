@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:oddsly/services/api_service.dart';
 
 class MatchDetailScreen extends StatefulWidget {
-  final VoidCallback onBetPlaced; // Принимаем колбэк
+  final VoidCallback onBetPlaced;
+  final Map<String, dynamic> match;
 
-  const MatchDetailScreen({super.key, required this.onBetPlaced});
+  const MatchDetailScreen({
+    super.key,
+    required this.onBetPlaced,
+    required this.match,
+  });
 
   @override
   State<MatchDetailScreen> createState() => _MatchDetailScreenState();
@@ -12,27 +17,80 @@ class MatchDetailScreen extends StatefulWidget {
 
 class _MatchDetailScreenState extends State<MatchDetailScreen> {
   final ApiService _apiService = ApiService();
+  final TextEditingController _amountController = TextEditingController(
+    text: '200',
+  );
   bool _isLoading = false;
+  String _selectedOutcome = 'home';
+
+  String _getOutcomeLabel() {
+    final match = widget.match;
+    switch (_selectedOutcome) {
+      case 'home':
+        return 'П1 - ${match['odds']['home']}';
+      case 'draw':
+        return 'X - ${match['odds']['draw']}';
+      case 'away':
+        return 'П2 - ${match['odds']['away']}';
+      default:
+        return '';
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _amountController.addListener(() {
+      setState(() {}); // Обновляем UI при вводе
+    });
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
 
   void _handlePlaceBet() async {
     if (_isLoading) return;
+
+    final amount = double.tryParse(_amountController.text);
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Введите корректную сумму'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _isLoading = true;
     });
 
-    final String matchId = "chelsea_vs_leicester";
-    final double amount = 200.0;
-    final String outcome = "П2 - 1.3";
+    final match = widget.match;
 
-    final result = await _apiService.placeBet(matchId, amount, outcome);
+    final result = await _apiService.placeBet(
+      match['id'],
+      amount,
+      _getOutcomeLabel(),
+      matchInfo: {
+        'team1Name': match['team1Name'],
+        'team2Name': match['team2Name'],
+        'league': match['league'],
+      },
+    );
 
     if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
 
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     if (result.containsKey('betId')) {
-      // Вызываем колбэк при успехе!
       widget.onBetPlaced();
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -43,7 +101,6 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           backgroundColor: Colors.green,
         ),
       );
-      // Возвращаемся назад после успешной ставки
       Navigator.of(context).pop();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -53,15 +110,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         ),
       );
     }
-
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // ... (весь остальной код остается без изменений)
+    final match = widget.match;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -70,9 +124,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'ПРЕМЬЕР ЛИГА',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          match['league']?.toUpperCase() ?? 'МАТЧ',
+          style: const TextStyle(color: Colors.white),
         ),
         centerTitle: true,
         actions: [
@@ -87,12 +141,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           Column(
             children: [
               const SizedBox(height: 20),
-              const TeamInfoRow(teamName: 'Chelsea', score: 1),
+              TeamInfoRow(teamName: match['team1Name'] ?? 'Team 1', score: 0),
               const SizedBox(height: 10),
-              const TeamInfoRow(teamName: 'Leicester C', score: 2),
+              TeamInfoRow(teamName: match['team2Name'] ?? 'Team 2', score: 0),
               const SizedBox(height: 10),
               const Text(
-                '49:30',
+                '00:00',
                 style: TextStyle(color: Colors.orange, fontSize: 12),
               ),
               const SizedBox(height: 20),
@@ -102,23 +156,23 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                   children: const [
                     StatsRow(
                       title: 'Атаки',
-                      value1: 27,
-                      value2: 12,
-                      progress1: 0.7,
+                      value1: 0,
+                      value2: 0,
+                      progress1: 0.5,
                     ),
                     SizedBox(height: 8),
                     StatsRow(
                       title: 'Удары',
-                      value1: 6,
-                      value2: 16,
-                      progress1: 0.3,
+                      value1: 0,
+                      value2: 0,
+                      progress1: 0.5,
                     ),
                     SizedBox(height: 8),
                     StatsRow(
                       title: 'Владение мячем',
-                      value1: 70,
-                      value2: 30,
-                      progress1: 0.7,
+                      value1: 50,
+                      value2: 50,
+                      progress1: 0.5,
                       isPercent: true,
                     ),
                   ],
@@ -161,13 +215,127 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        BetOption(label: '1', value: '1.3'),
-                        BetOption(label: 'X', value: '1.3'),
-                        BetOption(label: '2', value: '1.3'),
+                      children: [
+                        Expanded(
+                          child: BetOption(
+                            label: '1',
+                            value: match['odds']['home'] ?? '1.0',
+                            isSelected: _selectedOutcome == 'home',
+                            onTap: () {
+                              setState(() {
+                                _selectedOutcome = 'home';
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: BetOption(
+                            label: 'X',
+                            value: match['odds']['draw'] ?? '1.0',
+                            isSelected: _selectedOutcome == 'draw',
+                            onTap: () {
+                              setState(() {
+                                _selectedOutcome = 'draw';
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: BetOption(
+                            label: '2',
+                            value: match['odds']['away'] ?? '1.0',
+                            isSelected: _selectedOutcome == 'away',
+                            onTap: () {
+                              setState(() {
+                                _selectedOutcome = 'away';
+                              });
+                            },
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Сумма ставки',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: '₸ 200',
+                        prefixText: '₸ ',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Исход:',
+                                style: TextStyle(fontSize: 14),
+                              ),
+                              Text(
+                                _getOutcomeLabel(),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Возможный выигрыш:',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                '₸ ${_calculatePotentialWin()}',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -204,9 +372,36 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       ),
     );
   }
+
+  String _calculatePotentialWin() {
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    final match = widget.match;
+
+    double coefficient = 1.0;
+    final odds = match['odds'];
+
+    switch (_selectedOutcome) {
+      case 'home':
+        coefficient = odds['home'] is String
+            ? double.tryParse(odds['home']) ?? 1.0
+            : (odds['home'] as num).toDouble();
+        break;
+      case 'draw':
+        coefficient = odds['draw'] is String
+            ? double.tryParse(odds['draw']) ?? 1.0
+            : (odds['draw'] as num).toDouble();
+        break;
+      case 'away':
+        coefficient = odds['away'] is String
+            ? double.tryParse(odds['away']) ?? 1.0
+            : (odds['away'] as num).toDouble();
+        break;
+    }
+
+    return (amount * coefficient).toStringAsFixed(0);
+  }
 }
 
-// ... (классы TeamInfoRow, StatsRow, BetOption остаются без изменений)
 class TeamInfoRow extends StatelessWidget {
   final String teamName;
   final int score;
@@ -221,15 +416,17 @@ class TeamInfoRow extends StatelessWidget {
         children: [
           const Icon(Icons.shield, color: Colors.blue),
           const SizedBox(width: 12),
-          Text(
-            teamName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+          Expanded(
+            child: Text(
+              teamName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Spacer(),
           Text(
             score.toString(),
             style: const TextStyle(
@@ -314,26 +511,55 @@ class StatsRow extends StatelessWidget {
 
 class BetOption extends StatelessWidget {
   final String label;
-  final String value;
-  const BetOption({super.key, required this.label, required this.value});
+  final dynamic value; // Изменено на dynamic
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const BetOption({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Text(label, style: const TextStyle(fontSize: 16, color: Colors.grey)),
-          const SizedBox(width: 16),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    final displayValue = value is String ? value : value.toStringAsFixed(2);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.orange : Colors.grey[200],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.orange : Colors.transparent,
+            width: 2,
           ),
-        ],
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 16,
+                color: isSelected ? Colors.white : Colors.grey[600],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              displayValue,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : Colors.black,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
