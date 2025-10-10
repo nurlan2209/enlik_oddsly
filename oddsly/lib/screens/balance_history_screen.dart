@@ -156,9 +156,18 @@ class TransactionHistoryItem extends StatelessWidget {
     final type = transaction['type'] ?? 'transaction';
     final status = transaction['status'] ?? 'completed';
     final amount = (transaction['amount'] as num?)?.toDouble() ?? 0.0;
+    final commission = (transaction['commission'] as num?)?.toDouble() ?? 0.0;
+    final netAmount = (transaction['netAmount'] as num?)?.toDouble();
+    final totalAmount = (transaction['totalAmount'] as num?)?.toDouble();
     final cardNumber = transaction['cardNumber'] ?? '';
     final createdAt = transaction['createdAt'];
     final color = _getStatusColor(type);
+
+    // Для пополнения показываем сколько пришло на баланс
+    // Для вывода показываем сколько вывели
+    final displayAmount = type.toLowerCase() == 'deposit'
+        ? (netAmount ?? amount)
+        : amount;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -206,20 +215,32 @@ class TransactionHistoryItem extends StatelessWidget {
             children: [
               const Icon(Icons.credit_card, color: Colors.blue),
               const SizedBox(width: 8),
-              Text(
-                cardNumber.isNotEmpty ? cardNumber : '•••• •••• •••• ••••',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const Spacer(),
-              Text(
-                '${type.toLowerCase() == 'deposit' ? '+' : '-'}₸${amount.toStringAsFixed(0)}',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: type.toLowerCase() == 'deposit'
-                      ? Colors.green
-                      : Colors.orange,
+              Expanded(
+                child: Text(
+                  cardNumber.isNotEmpty ? cardNumber : '•••• •••• •••• ••••',
+                  style: const TextStyle(fontSize: 16),
                 ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${type.toLowerCase() == 'deposit' ? '+' : '-'}₸${displayAmount.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: type.toLowerCase() == 'deposit'
+                          ? Colors.green
+                          : Colors.orange,
+                    ),
+                  ),
+                  if (commission > 0)
+                    Text(
+                      'Комиссия ₸${commission.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                ],
               ),
             ],
           ),

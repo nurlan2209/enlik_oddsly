@@ -474,7 +474,9 @@ app.post("/deposit", verifyToken, async (req, res) => {
       transaction.set(transactionRef, {
         userId,
         type: "deposit",
-        amount: depositAmount,
+        amount: amount, // Исходная сумма
+        commission: commission, // Комиссия
+        netAmount: depositAmount, // Чистая сумма на баланс
         status: "completed",
         cardNumber: cardNumber || "",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -531,7 +533,9 @@ app.post("/withdraw", verifyToken, async (req, res) => {
       transaction.set(transactionRef, {
         userId,
         type: "withdrawal",
-        amount: amount,
+        amount: amount, // Исходная сумма вывода
+        commission: commission, // Комиссия
+        totalAmount: totalAmount, // Общая списанная сумма
         status: "completed",
         cardNumber: cardNumber,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
